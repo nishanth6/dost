@@ -1,5 +1,17 @@
-<<<<<<< HEAD
-# Dost
+---
+title: MindNest AI
+emoji: 🌱
+colorFrom: pink
+colorTo: purple
+sdk: gradio
+sdk_version: "6.19.0"
+python_version: "3.12"
+app_file: app.py
+pinned: false
+short_description: 'AI Mental Wellness Companion for Exam Aspirants'
+---
+
+# Dost — MindNest AI
 
 > An empathetic, non-clinical AI wellness companion designed to support Kota's competitive exam aspirants through post-mock-test self-doubt and burnout.
 
@@ -18,7 +30,7 @@ Dost uses a focused conversational loop centered on zero-shot extraction of spec
 ## How the solution works
 
 ```
-[Student Journal Entry] 
+[Student Journal Entry]
        |
        v
 [Crisis Screening] ------(Yes: Crisis detected)------> [Compassionate Helpline Redirect]
@@ -36,14 +48,14 @@ Dost uses a focused conversational loop centered on zero-shot extraction of spec
 3. **Trigger Extraction**: Gemini parses the journal entry to identify the unique underlying stress trigger (mock test failure, backlog panic, peer comparison, etc.).
 4. **Coping suggestion & encouragement**: Gemini generates a structured response under 120 words consisting of:
    - Empathic trigger acknowledgement (reflecting understanding).
-   - One concrete, tailored coping routine (e.g., box breathing, a 5-minute walks).
+   - One concrete, tailored coping routine (e.g., box breathing, a 5-minute walk).
    - One line of Hinglish/English encouragement.
 
 ## Assumptions made
 
-- The application runs in a secure server-side environment where `GEMINI_API_KEY` environment variables are handled safely and never exposed to the client.
+- The application runs in a secure server-side environment where `GEMINI_API_KEY` is loaded via environment variables and never exposed to the client.
 - Zero-shot extraction via Gemini is robust enough to isolate key triggers like mock test failures, parent pressure, backlog guilt, and sleep deprivation.
-- The system prompt's crisis handling is backed up by simple, robust string scanning for critical crisis/self-harm keywords in the user's input to ensure safety and bypass the LLM loop if necessary.
+- The system prompt's crisis handling is backed by simple keyword scanning that bypasses the LLM loop entirely for safety-critical disclosures.
 
 ## Setup
 
@@ -63,27 +75,10 @@ pytest
 
 ## Tech stack
 
-- Language/framework:
+- Language/framework: Python + Gradio (`gr.ChatInterface`)
 - AI: Google Gemini API (`google-genai`)
-- Live demo (optional, not required for submission):
+- Deploy: Hugging Face Spaces (sdk: gradio)
 
 ## Team
 
 - [Your name] — Solo, Participant ID PW-MYS-490
-
-=======
----
-title: MindNest AI
-emoji: ⚡
-colorFrom: pink
-colorTo: purple
-sdk: gradio
-sdk_version: 6.19.0
-python_version: '3.13'
-app_file: app.py
-pinned: false
-short_description: 'AI Mental Wellness Tracker '
----
-
-Check out the configuration reference at https://huggingface.co/docs/hub/spaces-config-reference
->>>>>>> c5b1cbc4389cddbd35efc8739bbd31e1e5ef444a

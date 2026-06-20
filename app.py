@@ -412,7 +412,7 @@ def respond_custom(message: str, history: list, session: dict) -> tuple[str, lis
         print(f"Error in respond_custom: {e}")
         updated_history = history + [
             {"role": "user", "content": message},
-            {"role": "assistant", "content": _API_ERROR_RESPONSE}
+            {"role": "assistant", "content": f"⚠️ API Error: {str(e)}\n\n{_API_ERROR_RESPONSE}"}
         ]
         
     counts = _get_trigger_counts(session.get("triggers", []))

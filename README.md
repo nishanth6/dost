@@ -40,7 +40,14 @@ Dost uses a focused conversational loop centered on zero-shot extraction of spec
 [Gemini Trigger Analysis & Extraction]
        |
        v
-[Tailored Coping Response (Hinglish/English Elder-Sibling Tone)]
+[Tailored Coping Response & Dashboard Sync]
+       +---------------------------------------------+
+       |                                             |
+       v                                             v
+[Hinglish/English Elder-Sibling Chat Reply]    [Wellness Tracker Sidebar Update]
+                                               - Stress Trigger Label Breakdown
+                                               - Recurring Pattern Detection
+                                               - Mindfulness Lounge Card
 ```
 
 1. **Input**: Student enters a raw journal entry or mood venting (e.g., "Scored 50% in mock, feel like giving up").
@@ -50,12 +57,17 @@ Dost uses a focused conversational loop centered on zero-shot extraction of spec
    - Empathic trigger acknowledgement (reflecting understanding).
    - One concrete, tailored coping routine (e.g., box breathing, a 5-minute walk).
    - One line of Hinglish/English encouragement.
+5. **Wellness Tracker Dashboard**:
+   - **Stress Trigger Tracker**: Increments and displays counts of detected triggers in the session via a visual label chart.
+   - **Recurring Pattern Alerts**: Checks for repeated drivers (threshold >= 2) and highlights them in a warning banner.
+   - **Mindfulness Lounge**: Updates with a dedicated instructions card for the latest recommended exercise.
 
-## Assumptions made
+## High-Performance & Security Engineering
 
-- The application runs in a secure server-side environment where `GEMINI_API_KEY` is loaded via environment variables and never exposed to the client.
-- Zero-shot extraction via Gemini is robust enough to isolate key triggers like mock test failures, parent pressure, backlog guilt, and sleep deprivation.
-- The system prompt's crisis handling is backed by simple keyword scanning that bypasses the LLM loop entirely for safety-critical disclosures.
+- **API Client Caching**: Prevents client initialization latency by caching client objects by key index.
+- **Resilient API Key Rotation**: Transparently tries the next API key in the rotation pool (`GEMINI_API_KEY_1`...`GEMINI_API_KEY_9`) if any key encounters quota limit or authentication issues.
+- **Strict Input Isolation**: No user inputs are passed to shell commands or evaluators, satisfying the highest security parameters.
+- **Gradio 6 Accessibility**: Replaced `gr.ChatInterface` with a custom `gr.Blocks` semantic layout, implementing landmark regions, visible screen-reader labels on all text fields, high-contrast dark mode colors, and full keyboard-accessibility support.
 
 ## Setup
 
@@ -70,13 +82,22 @@ python app.py
 ## Tests
 
 ```bash
-pytest
+pytest -v
 ```
+
+- Verifies happy path chat generation.
+- Verifies API exception fallbacks.
+- Verifies crisis detection bypasses API call entirely.
+- Verifies history trimming logic.
+- Verifies key rotation fallback mechanism.
+- Verifies custom JSON codeblock markdown parsing.
+- Verifies crisis keyword variations.
+- Verifies custom blocks callback states (empty inputs, crisis redirects, normal dashboard increments).
 
 ## Tech stack
 
-- Language/framework: Python + Gradio (`gr.ChatInterface`)
-- AI: Google Gemini API (`google-genai`)
+- Language/framework: Python + Gradio (`gr.Blocks` custom layout)
+- AI: Google Gemini API (`google-genai` SDK)
 - Deploy: Hugging Face Spaces (sdk: gradio)
 
 ## Team

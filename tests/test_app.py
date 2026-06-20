@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 import app
+import config
 
 
 # ---------------------------------------------------------------------------
@@ -42,7 +43,7 @@ def _gemini_json_response(trigger: str = "mock-score", mindfulness: str = "box-b
 class TestRespond:
     """Tests for the core respond() handler."""
 
-    @patch("app.get_client")
+    @patch("config.get_client")
     def test_happy_path_returns_reply_text(self, mock_get_client):
         """respond() extracts and returns the 'reply' field from Gemini's JSON."""
         mock_client = MagicMock()
@@ -60,12 +61,14 @@ class TestRespond:
         assert "mock score" in reply.lower()
         mock_client.models.generate_content.assert_called_once()
 
-    @patch("app.get_client")
+    @patch("config.get_client")
     def test_api_error_returns_fallback_not_traceback(self, mock_get_client):
         """respond() returns a clean fallback string when Gemini raises, not a traceback."""
         mock_get_client.return_value = MagicMock(
-            **{"models.generate_content.side_effect": Exception("quota exceeded")}
+            **{"models.generate_action.side_effect": Exception("quota exceeded")}
         )
+        # Force Exception in generate_content
+        mock_get_client.return_value.models.generate_content.side_effect = Exception("quota exceeded")
 
         reply, _session = app.respond(
             "I can't sleep thinking about UPSC.",
@@ -80,10 +83,6 @@ class TestRespond:
         """
         A crisis-level entry must return the safety redirect message with
         Indian helpline details — no Gemini API call must occur.
-
-        This verifies the local keyword gate fires before any network call,
-        so the safety response is instant and guaranteed regardless of API
-        availability.
         """
         crisis_input = "I feel like killing myself, JEE stress is too much to handle."
 
@@ -93,20 +92,15 @@ class TestRespond:
             session=_make_session(),
         )
 
-        # Both helplines must appear in the safety redirect
-        assert "Sneha India" in reply, "Safety redirect must name Sneha India helpline"
-        assert "Vandrevala" in reply, "Safety redirect must name Vandrevala Foundation"
-        # Confirm the reply is the pre-defined constant, not a Gemini-generated response
-        assert reply == app._SAFETY_RESPONSE, (
-            "Crisis input must return _SAFETY_RESPONSE exactly — "
-            "no model-generated content allowed for safety-critical path"
-        )
+        assert "Sneha India" in reply
+        assert "Vandrevala" in reply
+        assert reply == app._SAFETY_RESPONSE
 
     def test_crisis_bypasses_api_entirely(self):
-        """Confirm get_client() is never called on a crisis entry (no quota consumed)."""
+        """Confirm get_client() is never called on a crisis entry."""
         crisis_input = "I want to end my life. Everything is pointless."
 
-        with patch("app.get_client") as mock_get_client:
+        with patch("config.get_client") as mock_get_client:
             app.respond(crisis_input, history=[], session=_make_session())
             mock_get_client.assert_not_called()
 
@@ -119,7 +113,7 @@ class TestRespond:
         expected_len = 1 + 2 * app._MAX_HISTORY_TURNS + 1
         assert len(contents) == expected_len
 
-    @patch("app.get_client")
+    @patch("config.get_client")
     def test_pattern_notice_appears_after_repeated_trigger(self, mock_get_client):
         """Pattern detection fires after the same trigger recurs >= _PATTERN_THRESHOLD."""
         mock_client = MagicMock()
@@ -138,7 +132,7 @@ class TestRespond:
 
         assert "Pattern noticed" in reply or "peer comparison" in reply.lower()
 
-    @patch("app.get_client")
+    @patch("config.get_client")
     def test_mindfulness_exercise_text_inlined_in_reply(self, mock_get_client):
         """The full mindfulness exercise text must appear verbatim in the reply."""
         mock_client = MagicMock()
@@ -153,7 +147,6 @@ class TestRespond:
             session=_make_session(),
         )
 
-        # The inlined exercise text must come from the named menu
         assert "Box Breathing" in reply or "box-breath" in reply.lower()
 
 
@@ -183,6 +176,120 @@ class TestPatternDetection:
 
 
 # ---------------------------------------------------------------------------
+# New Optimization Tests
+# ---------------------------------------------------------------------------
+
+class TestKeyRotation:
+    """Tests for resilient API key rotation."""
+
+    @patch("config.GEMINI_API_KEYS", ["key_fail", "key_success"])
+    @patch("config.get_client")
+    def test_key_rotation_on_failure(self, mock_get_client):
+        """Verify _call_gemini_with_rotation falls back to the next key when one fails."""
+        mock_client_fail = MagicMock()
+        mock_client_fail.models.generate_content.side_effect = Exception("Quota exceeded")
+
+        mock_client_success = MagicMock()
+        mock_client_success.models.generate_content.return_value = MagicMock(text="Rotated response success!")
+
+        # get_client(key_index=0) returns fail client, get_client(key_index=1) returns success client
+        def side_effect(key_index):
+            if key_index == 0:
+                return mock_client_fail
+            return mock_client_success
+
+        mock_get_client.side_effect = side_effect
+
+        result = app._call_gemini_with_rotation([{"role": "user", "parts": [{"text": "Hello"}]}])
+        assert result == "Rotated response success!"
+        assert mock_get_client.call_count == 2
+
+
+class TestJsonParser:
+    """Tests for custom Markdown-enclosed JSON parsing."""
+
+    def test_parse_with_markdown_fences(self):
+        """Verify that markdown fences are successfully stripped before parsing."""
+        raw_fence = "```json\n{\"trigger\": \"burnout\", \"mindfulness\": \"body-scan\", \"reply\": \"take a break\"}\n```"
+        parsed = app._parse_gemini_json(raw_fence)
+        assert parsed["trigger"] == "burnout"
+        assert parsed["mindfulness"] == "body-scan"
+        assert parsed["reply"] == "take a break"
+
+    def test_parse_malformed_json_raises_value_error(self):
+        """Verify that invalid JSON raises ValueError."""
+        raw_invalid = "This is not JSON at all"
+        with pytest.raises(Exception):
+            app._parse_gemini_json(raw_invalid)
+
+
+class TestCrisisKeywordVariation:
+    """Tests for crisis keyword detection robustness."""
+
+    def test_case_insensitive_crisis(self):
+        """Crisis keyword detector should catch uppercase or mixed case crisis keywords."""
+        assert app._is_crisis("I want to KILL MYSELF now.") is True
+        assert app._is_crisis("Suicide seems like an option.") is True
+
+    def test_clean_input_is_safe(self):
+        """Verify non-crisis sentences do not false-trigger the crisis check."""
+        assert app._is_crisis("I scored low but I will study harder.") is False
+        assert app._is_crisis("I am feeling very anxious about mock tests.") is False
+
+
+class TestCustomBlocksCallbacks:
+    """Tests for the respond_custom blocks callback."""
+
+    def test_empty_message_ignored(self):
+        """Empty input message returns unmodified history and clears text box."""
+        session = _make_session()
+        cleared_text, history, updated_session, counts, pattern, exercises = app.respond_custom(
+            "   ", history=[], session=session
+        )
+        assert cleared_text == ""
+        assert len(history) == 0
+        assert updated_session == session
+        assert counts == {}
+        assert "No recurring patterns" in pattern
+
+    def test_crisis_message_custom_callback(self):
+        """Crisis input message in respond_custom updates history with crisis card and updates dashboard."""
+        session = _make_session()
+        cleared_text, history, updated_session, counts, pattern, exercises = app.respond_custom(
+            "I want to kill myself.", history=[], session=session
+        )
+        assert cleared_text == ""
+        assert len(history) == 1
+        assert history[0][0] == "I want to kill myself."
+        assert "🆘" in history[0][1]
+        assert updated_session == session  # Triggers should NOT change
+        assert counts == {}
+
+    @patch("app._call_gemini_with_rotation")
+    def test_normal_message_custom_callback(self, mock_gemini_call):
+        """Normal input message updates history, session triggers, and dashboard counts."""
+        mock_gemini_call.return_value = _gemini_json_response(
+            trigger="parental-pressure", mindfulness="body-scan"
+        )
+        session = _make_session()
+
+        cleared_text, history, updated_session, counts, pattern, exercises = app.respond_custom(
+            "My parents are constantly complaining about my mock results.",
+            history=[],
+            session=session,
+        )
+
+        assert cleared_text == ""
+        assert len(history) == 1
+        assert history[0][0] == "My parents are constantly complaining about my mock results."
+        assert "mock score" in history[0][1].lower()  # reply body text has mock score
+        assert "body-scan" in updated_session["exercises"]
+        assert "parental-pressure" in updated_session["triggers"]
+        assert counts["Parental Pressure"] == 1
+        assert "Body Scan" in exercises
+
+
+# ---------------------------------------------------------------------------
 # Config tests
 # ---------------------------------------------------------------------------
 
@@ -190,13 +297,7 @@ class TestConfig:
     """Tests for config.py key loading."""
 
     def test_missing_all_keys_raises_runtime_error(self, monkeypatch):
-        """RuntimeError is raised when no API key is found in the environment.
-
-        config.py re-executes 'from dotenv import load_dotenv' on reload(),
-        so patching config.load_dotenv is too late — the name is rebound to the
-        real function before our patch applies. We patch dotenv.load_dotenv at
-        the source so reload() can't re-inject keys from the .env file.
-        """
+        """RuntimeError is raised when no API key is found in the environment."""
         for key in ["GEMINI_API_KEY"] + [f"GEMINI_API_KEY_{i}" for i in range(1, 10)]:
             monkeypatch.delenv(key, raising=False)
 

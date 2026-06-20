@@ -33,12 +33,22 @@ if not GEMINI_API_KEYS:
     )
 
 
-def get_client():
+# Dictionary caching client instances: key index -> Client
+_clients = {}
+
+
+def get_client(key_index: int = 0):
     """
-    Return a Gemini SDK client initialised with the first available API key.
+    Return a Gemini SDK client initialised with the API key at key_index.
+    Caches the client instance to avoid recreation overhead.
 
     Uses the google-genai SDK. Import is deferred so the module can be loaded
     (and tested) without the SDK installed, as long as get_client() is mocked.
     """
-    from google import genai
-    return genai.Client(api_key=GEMINI_API_KEYS[0])
+    global _clients
+    idx = key_index % len(GEMINI_API_KEYS)
+    if idx not in _clients:
+        from google import genai
+        _clients[idx] = genai.Client(api_key=GEMINI_API_KEYS[idx])
+    return _clients[idx]
+

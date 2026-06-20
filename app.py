@@ -229,11 +229,27 @@ def _build_contents(message: str, history: list) -> list:
     History is capped at the last _MAX_HISTORY_TURNS turns to bound token usage.
     No user text is ever passed to eval/exec or shell commands.
     """
-    trimmed = history[-_MAX_HISTORY_TURNS:]
+    history = history or []
     contents = [{"role": "user", "parts": [{"text": SYSTEM_PROMPT}]}]
-    for user_msg, bot_msg in trimmed:
-        contents.append({"role": "user", "parts": [{"text": user_msg}]})
-        contents.append({"role": "model", "parts": [{"text": bot_msg}]})
+    
+    # Detect if history is list-of-dicts or list-of-tuples/lists
+    is_dict_format = len(history) > 0 and isinstance(history[0], dict)
+    
+    if is_dict_format:
+        trimmed = history[-_MAX_HISTORY_TURNS * 2:]
+        for msg in trimmed:
+            role = msg.get("role")
+            content = msg.get("content")
+            gemini_role = "model" if role == "assistant" else "user"
+            contents.append({"role": gemini_role, "parts": [{"text": content}]})
+    else:
+        trimmed = history[-_MAX_HISTORY_TURNS:]
+        for item in trimmed:
+            if isinstance(item, (list, tuple)) and len(item) == 2:
+                user_msg, bot_msg = item
+                contents.append({"role": "user", "parts": [{"text": user_msg}]})
+                contents.append({"role": "model", "parts": [{"text": bot_msg}]})
+                
     contents.append({"role": "user", "parts": [{"text": message}]})
     return contents
 
@@ -336,6 +352,7 @@ def respond_custom(message: str, history: list, session: dict) -> tuple[str, lis
     Clears input, appends messages to chatbot history, updates session state,
     and returns updated widget values for the Wellness Dashboard.
     """
+    history = history or []
     if not message or not message.strip():
         counts = _get_trigger_counts(session.get("triggers", []))
         pattern_notice = _detect_pattern(session.get("triggers", []))
@@ -345,7 +362,10 @@ def respond_custom(message: str, history: list, session: dict) -> tuple[str, lis
 
     # 1. Local crisis screening
     if _is_crisis(message):
-        updated_history = history + [[message, _SAFETY_RESPONSE]]
+        updated_history = history + [
+            {"role": "user", "content": message},
+            {"role": "assistant", "content": _SAFETY_RESPONSE}
+        ]
         counts = _get_trigger_counts(session.get("triggers", []))
         pattern_notice = _detect_pattern(session.get("triggers", []))
         pattern_text = pattern_notice if pattern_notice else "No recurring patterns detected yet."
@@ -383,11 +403,17 @@ def respond_custom(message: str, history: list, session: dict) -> tuple[str, lis
         if pattern_notice:
             full_reply += f"\n\n{pattern_notice}"
             
-        updated_history = history + [[message, full_reply]]
+        updated_history = history + [
+            {"role": "user", "content": message},
+            {"role": "assistant", "content": full_reply}
+        ]
         
     except Exception as e:
         print(f"Error in respond_custom: {e}")
-        updated_history = history + [[message, _API_ERROR_RESPONSE]]
+        updated_history = history + [
+            {"role": "user", "content": message},
+            {"role": "assistant", "content": _API_ERROR_RESPONSE}
+        ]
         
     counts = _get_trigger_counts(session.get("triggers", []))
     pattern_notice = _detect_pattern(session.get("triggers", []))

@@ -259,9 +259,10 @@ class TestCustomBlocksCallbacks:
             "I want to kill myself.", history=[], session=session
         )
         assert cleared_text == ""
-        assert len(history) == 1
-        assert history[0][0] == "I want to kill myself."
-        assert "🆘" in history[0][1]
+        assert len(history) == 2
+        assert history[0] == {"role": "user", "content": "I want to kill myself."}
+        assert history[1]["role"] == "assistant"
+        assert "🆘" in history[1]["content"]
         assert updated_session == session  # Triggers should NOT change
         assert counts == {}
 
@@ -280,9 +281,10 @@ class TestCustomBlocksCallbacks:
         )
 
         assert cleared_text == ""
-        assert len(history) == 1
-        assert history[0][0] == "My parents are constantly complaining about my mock results."
-        assert "mock score" in history[0][1].lower()  # reply body text has mock score
+        assert len(history) == 2
+        assert history[0] == {"role": "user", "content": "My parents are constantly complaining about my mock results."}
+        assert history[1]["role"] == "assistant"
+        assert "mock score" in history[1]["content"].lower()  # reply body text has mock score
         assert "body-scan" in updated_session["exercises"]
         assert "parental-pressure" in updated_session["triggers"]
         assert counts["Parental Pressure"] == 1

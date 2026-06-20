@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 
 load_dotenv()  # reads .env in the project root if present
 
-GEMINI_MODEL: str = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+GEMINI_MODEL: str = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash")
 
 # Primary key, plus optional rotation pool GEMINI_API_KEY_1 … GEMINI_API_KEY_9.
 # Rotation keys take precedence when set; falls back to GEMINI_API_KEY.

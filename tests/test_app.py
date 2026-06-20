@@ -149,6 +149,26 @@ class TestRespond:
 
         assert "Box Breathing" in reply or "box-breath" in reply.lower()
 
+    @patch("config.get_client")
+    def test_gemini_crisis_trigger_standardized_redirect(self, mock_get_client):
+        """Verify that if Gemini classifies a response as 'crisis', the response is overridden by safety info."""
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = MagicMock(
+            text=_gemini_json_response(trigger="crisis", mindfulness=None)
+        )
+        mock_get_client.return_value = mock_client
+
+        reply, _session = app.respond(
+            "Some input that isn't caught locally but Gemini flags.",
+            history=[],
+            session=_make_session(),
+        )
+
+        assert "Sneha India" in reply
+        assert "Vandrevala" in reply
+        assert reply == app._SAFETY_RESPONSE
+
+
 
 # ---------------------------------------------------------------------------
 # Pattern detection unit tests
@@ -289,6 +309,44 @@ class TestCustomBlocksCallbacks:
         assert "parental-pressure" in updated_session["triggers"]
         assert counts["Parental Pressure"] == 1
         assert "Body Scan" in exercises
+
+    @patch("app._call_gemini_with_rotation")
+    def test_respond_custom_exception_clean_fallback(self, mock_gemini_call):
+        """Verify that respond_custom handles exceptions cleanly without leaking details to UI."""
+        mock_gemini_call.side_effect = Exception("Internal database network timeout error")
+        session = _make_session()
+
+        cleared_text, history, updated_session, counts, pattern, exercises = app.respond_custom(
+            "Regular input venting.",
+            history=[],
+            session=session,
+        )
+
+        assert cleared_text == ""
+        assert len(history) == 2
+        assert history[0] == {"role": "user", "content": "Regular input venting."}
+        assert history[1]["role"] == "assistant"
+        # Verify it doesn't leak raw exception info
+        assert "Internal database network timeout" not in history[1]["content"]
+        assert app._API_ERROR_RESPONSE in history[1]["content"]
+
+    @patch("app._call_gemini_with_rotation")
+    def test_respond_custom_crisis_trigger_standardized_redirect(self, mock_gemini_call):
+        """Verify that respond_custom standardizes Gemini-detected crisis triggers."""
+        mock_gemini_call.return_value = _gemini_json_response(trigger="crisis")
+        session = _make_session()
+
+        cleared_text, history, updated_session, counts, pattern, exercises = app.respond_custom(
+            "Venting message.",
+            history=[],
+            session=session,
+        )
+
+        assert cleared_text == ""
+        assert len(history) == 2
+        assert history[1]["role"] == "assistant"
+        assert history[1]["content"] == app._SAFETY_RESPONSE
+
 
 
 # ---------------------------------------------------------------------------

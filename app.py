@@ -7,11 +7,20 @@ Deploy:       push this repo to a HF Space with sdk: gradio
 """
 import json
 import gradio as gr
+from pydantic import BaseModel, Field
 
 import config
 from config import get_client, GEMINI_MODEL
 
 # ---------------------------------------------------------------------------
+# Structured outputs response schema
+# ---------------------------------------------------------------------------
+class AnalysisResponse(BaseModel):
+    trigger: str = Field(description="one of: mock-score, peer-comparison, backlog-guilt, parental-pressure, sleep-deprivation, time-pressure, self-doubt, isolation, burnout, other, or crisis")
+    mindfulness: str | None = Field(description="exactly one key from MINDFULNESS_MENU or null/None if trigger is crisis")
+    reply: str = Field(description="response under 120 words reflective of the trigger, recommending the exercise, and providing grounded Hinglish encouragement")
+
+# -------------------------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
@@ -279,6 +288,9 @@ def _format_reply(parsed: dict, session: dict) -> tuple[str, dict]:
     Returns (reply_text, updated_session).
     """
     trigger = parsed.get("trigger", "other")
+    if trigger == "crisis":
+        return _SAFETY_RESPONSE, session
+
     mindfulness_key = parsed.get("mindfulness")
     reply_body = parsed.get("reply", "").strip()
 
@@ -311,13 +323,19 @@ def _call_gemini_with_rotation(contents: list) -> str:
     Call Gemini generate_content, rotating through the available keys if a call fails.
     Returns response text.
     """
+    from google.genai import types
     last_err = None
     for i in range(len(config.GEMINI_API_KEYS)):
         try:
             client = config.get_client(key_index=i)
             response = client.models.generate_content(
                 model=config.GEMINI_MODEL,
-                contents=contents
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=AnalysisResponse,
+                    temperature=0.1
+                )
             )
             if not response.text:
                 raise ValueError("Empty response received from Gemini.")
@@ -379,29 +397,33 @@ def respond_custom(message: str, history: list, session: dict) -> tuple[str, lis
         parsed = _parse_gemini_json(raw_text)
         
         trigger = parsed.get("trigger", "other")
-        mindfulness_key = parsed.get("mindfulness")
-        reply_body = parsed.get("reply", "").strip()
         
-        session = dict(session)
-        session["triggers"] = session.get("triggers", []) + [trigger]
-        if mindfulness_key and mindfulness_key in MINDFULNESS_MENU:
-            if mindfulness_key not in session.get("exercises", []):
-                session["exercises"] = session.get("exercises", []) + [mindfulness_key]
-                
-        # Format response
-        if mindfulness_key and mindfulness_key in MINDFULNESS_MENU:
-            exercise_text_inline = (
-                f"\n\n🧘 **{mindfulness_key.title()} — try this now:**  \n"
-                f"{MINDFULNESS_MENU[mindfulness_key]}"
-            )
+        if trigger == "crisis":
+            full_reply = _SAFETY_RESPONSE
         else:
-            exercise_text_inline = ""
+            mindfulness_key = parsed.get("mindfulness")
+            reply_body = parsed.get("reply", "").strip()
             
-        full_reply = f"{reply_body}{exercise_text_inline}"
-        
-        pattern_notice = _detect_pattern(session["triggers"])
-        if pattern_notice:
-            full_reply += f"\n\n{pattern_notice}"
+            session = dict(session)
+            session["triggers"] = session.get("triggers", []) + [trigger]
+            if mindfulness_key and mindfulness_key in MINDFULNESS_MENU:
+                if mindfulness_key not in session.get("exercises", []):
+                    session["exercises"] = session.get("exercises", []) + [mindfulness_key]
+                    
+            # Format response
+            if mindfulness_key and mindfulness_key in MINDFULNESS_MENU:
+                exercise_text_inline = (
+                    f"\n\n🧘 **{mindfulness_key.title()} — try this now:**  \n"
+                    f"{MINDFULNESS_MENU[mindfulness_key]}"
+                )
+            else:
+                exercise_text_inline = ""
+                
+            full_reply = f"{reply_body}{exercise_text_inline}"
+            
+            pattern_notice = _detect_pattern(session["triggers"])
+            if pattern_notice:
+                full_reply += f"\n\n{pattern_notice}"
             
         updated_history = history + [
             {"role": "user", "content": message},
@@ -412,7 +434,7 @@ def respond_custom(message: str, history: list, session: dict) -> tuple[str, lis
         print(f"Error in respond_custom: {e}")
         updated_history = history + [
             {"role": "user", "content": message},
-            {"role": "assistant", "content": f"⚠️ API Error: {str(e)}\n\n{_API_ERROR_RESPONSE}"}
+            {"role": "assistant", "content": _API_ERROR_RESPONSE}
         ]
         
     counts = _get_trigger_counts(session.get("triggers", []))

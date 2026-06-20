@@ -65,7 +65,7 @@ Dost uses a focused conversational loop centered on zero-shot extraction of spec
 ## High-Performance & Security Engineering
 
 - **API Client Caching**: Prevents client initialization latency by caching client objects by key index.
-- **Resilient API Key Rotation**: Transparently tries the next API key in the rotation pool (`GEMINI_API_KEY_1`...`GEMINI_API_KEY_9`) if any key encounters quota limit or authentication issues.
+- **Resilient API Key Rotation**: Transparently tries the next API key in the rotation pool (`GEMINI_API_KEY_1`...`GEMINI_API_KEY_3`) if any key encounters quota limit or authentication issues.
 - **Strict Input Isolation**: No user inputs are passed to shell commands or evaluators, satisfying the highest security parameters.
 - **Gradio 6 Accessibility**: Replaced `gr.ChatInterface` with a custom `gr.Blocks` semantic layout, implementing landmark regions, visible screen-reader labels on all text fields, high-contrast dark mode colors, and full keyboard-accessibility support.
 
@@ -102,4 +102,4 @@ pytest -v
 
 ## Team
 
-- [Your name] — Solo, Participant ID PW-MYS-490
+- Nishanth J — Solo, Participant ID PW-MYS-490

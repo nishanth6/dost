@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Dost
 
 > An empathetic, non-clinical AI wellness companion designed to support Kota's competitive exam aspirants through post-mock-test self-doubt and burnout.
@@ -70,3 +71,19 @@ pytest
 
 - [Your name] — Solo, Participant ID PW-MYS-490
 
+=======
+---
+title: MindNest AI
+emoji: ⚡
+colorFrom: pink
+colorTo: purple
+sdk: gradio
+sdk_version: 6.19.0
+python_version: '3.13'
+app_file: app.py
+pinned: false
+short_description: 'AI Mental Wellness Tracker '
+---
+
+Check out the configuration reference at https://huggingface.co/docs/hub/spaces-config-reference
+>>>>>>> c5b1cbc4389cddbd35efc8739bbd31e1e5ef444a
